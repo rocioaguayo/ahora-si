@@ -6,13 +6,13 @@ Aplicación web para ordenar el presupuesto mensual de una familia: ingresos, ga
 
 ## Qué resuelve
 
-Llevar las cuentas de la casa en una planilla es engorroso desde el celular, y a fin de mes cuesta saber cuánto queda disponible. Ahora Sí registra cada movimiento en segundos y muestra:
+Llevar las cuentas de la casa en una planilla es engorroso desde el celular, y a fin de mes cuesta saber cuánto queda disponible. Ahora Sí registra cada movimiento en segundos y lo convierte en un panel para decidir:
 
 - **Saldo disponible del mes** y cuánto se puede gastar por semana en lo que resta del mes.
-- **Uso del presupuesto**, con alerta cuando los gastos pasan el 90% de los ingresos.
-- **Gastos por categoría**, para ver dónde se va la plata.
-- **Avance de las metas de ahorro**: casa, vehículo, fondo de emergencia.
-- **Historial por mes**, con opción de ocultar montos en pantalla.
+- **Presupuesto por categoría**: lo planificado contra lo gastado, con aviso al 80% y al superarlo.
+- **Últimos 6 meses**: ingresos, gastos y ahorro, y la variación de gastos contra el mes anterior.
+- **Metas de ahorro con objetivo**: avance, monto faltante y fecha estimada según el ritmo de ahorro.
+- **Movimientos editables**: corregir o eliminar registros, y descargarlos a Excel (CSV).
 
 ## Cómo funciona
 
@@ -43,15 +43,14 @@ El mismo `index.html` funciona de dos formas. Dentro de Apps Script usa la plani
 ## Estructura de datos
 
 ```
-Usuarios:     id | nombre | pinHash | ingreso | metas | fechaRegistro | correo
+Usuarios:     id | nombre | pinHash | ingreso | metas | fechaRegistro | correo | config (JSON)
 Movimientos:  id | userId | tipo | categoria | monto | descripcion | metaAhorro | fecha
 ```
 
 ## Próximos pasos
 
-- Editar y eliminar movimientos.
-- Metas de ahorro personalizadas con monto objetivo.
-- Comparación entre meses.
+- Metas de ahorro creadas por el usuario.
+- Movimientos recurrentes (sueldo, dividendo) que se registran solos.
 
 ---
 Desarrollado por Rocío Aguayo.

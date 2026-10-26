@@ -8,7 +8,7 @@
  *   El ID nunca va escrito en el código: así el repositorio puede ser público.
  *
  * Hojas que usa:
- *   Usuarios:     id | nombre | pinHash | ingreso | metas | fechaRegistro | correo
+ *   Usuarios:     id | nombre | pinHash | ingreso | metas | fechaRegistro | correo | config (JSON)
  *   Movimientos:  id | userId | tipo | categoria | monto | descripcion | metaAhorro | fecha
  */
 
@@ -115,7 +115,8 @@ function usuarioPublico_(row) {
     nombre: row[1],
     ingreso: Number(row[3] || 0),
     metas: row[4] ? String(row[4]).split(",").map(m => m.trim()).filter(Boolean) : METAS_POR_DEFECTO.split(","),
-    correo: row[6] ? String(row[6]) : ""
+    correo: row[6] ? String(row[6]) : "",
+    config: leerConfig_(row)
   };
 }
 
@@ -141,7 +142,7 @@ function registrarUsuario(data) {
     const existe = filas.slice(1).some(r => String(r[6]).trim().toLowerCase() === correo);
     if (existe) return { success: false, error: "Ya existe una cuenta con ese correo." };
 
-    sheet.appendRow([Utilities.getUuid(), nombre, crearHash_(pin), ingreso, METAS_POR_DEFECTO, new Date(), correo]);
+    sheet.appendRow([Utilities.getUuid(), nombre, crearHash_(pin), ingreso, METAS_POR_DEFECTO, new Date(), correo, "{}"]);
     enviarMailBienvenida_(correo, nombre);
     return { success: true };
   } catch (err) {
@@ -212,34 +213,143 @@ function logout(token) {
 }
 
 // ---------------------------------------------------------------------------
-// Movimientos y resumen
+// Configuración del usuario: presupuesto por categoría y objetivo de cada meta
 // ---------------------------------------------------------------------------
+
+function leerConfig_(row) {
+  try { return row[7] ? JSON.parse(row[7]) : {}; } catch (e) { return {}; }
+}
+
+function guardarConfig(token, config) {
+  try {
+    const userId = usuarioDeSesion_(token);
+    const u = buscarUsuarioPorId_(userId);
+    if (!u) throw new Error("Usuario no encontrado.");
+    const limpio = { presupuestos: {}, objetivos: {} };
+    const metas = usuarioPublico_(u.row).metas;
+    Object.keys((config && config.presupuestos) || {}).forEach(function (c) {
+      if (CATEGORIAS.indexOf(c) === -1) return;
+      const v = Math.round(Number(config.presupuestos[c]));
+      if (isFinite(v) && v > 0 && v < 1e10) limpio.presupuestos[c] = v;
+    });
+    Object.keys((config && config.objetivos) || {}).forEach(function (m) {
+      if (metas.indexOf(m) === -1) return;
+      const v = Math.round(Number(config.objetivos[m]));
+      if (isFinite(v) && v > 0 && v < 1e11) limpio.objetivos[m] = v;
+    });
+    getSheet_("Usuarios").getRange(u.fila, 8).setValue(JSON.stringify(limpio));
+    return { success: true, config: limpio };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Movimientos
+// ---------------------------------------------------------------------------
+
+// Valida y normaliza un movimiento recibido desde la pantalla.
+function validarMovimiento_(mov, metas) {
+  const tipo = String(mov && mov.tipo);
+  const monto = Math.round(Number(mov && mov.monto));
+  if (TIPOS.indexOf(tipo) === -1) throw new Error("Tipo de movimiento no válido.");
+  if (!isFinite(monto) || monto <= 0 || monto > 1e10) throw new Error("Ingresa un monto válido.");
+  let meta = "";
+  if (tipo === "AHORRO") {
+    meta = String(mov.metaAhorro || "");
+    if (metas.indexOf(meta) === -1) throw new Error("Meta de ahorro no válida.");
+  }
+  let categoria = tipo;
+  if (tipo === "GASTO") {
+    categoria = String(mov.categoria || "Otros");
+    if (CATEGORIAS.indexOf(categoria) === -1) categoria = "Otros";
+  }
+  let fecha = new Date();
+  if (mov.fecha && /^\d{4}-\d{2}-\d{2}$/.test(String(mov.fecha))) {
+    const p = String(mov.fecha).split("-");
+    fecha = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]), 12, 0, 0);
+    const hace = (Date.now() - fecha.getTime()) / 86400000;
+    if (hace > 400 || hace < -1) throw new Error("La fecha debe estar dentro del último año.");
+  }
+  return { tipo: tipo, monto: monto, categoria: categoria, meta: meta, descripcion: textoSeguro_(mov.descripcion), fecha: fecha };
+}
 
 function registrarMovimiento(token, mov) {
   try {
     const userId = usuarioDeSesion_(token);
     const u = buscarUsuarioPorId_(userId);
     if (!u) throw new Error("Usuario no encontrado.");
-
-    const tipo = String(mov && mov.tipo);
-    const monto = Math.round(Number(mov && mov.monto));
-    if (TIPOS.indexOf(tipo) === -1) return { success: false, error: "Tipo de movimiento no válido." };
-    if (!isFinite(monto) || monto <= 0 || monto > 1e10) return { success: false, error: "Ingresa un monto válido." };
-
-    let meta = "";
-    if (tipo === "AHORRO") {
-      meta = String(mov.metaAhorro || "");
-      if (usuarioPublico_(u.row).metas.indexOf(meta) === -1) return { success: false, error: "Meta de ahorro no válida." };
-    }
-    const categoria = tipo === "GASTO" ? (textoSeguro_(mov.categoria) || "Gasto general") : tipo;
-
-    getSheet_("Movimientos").appendRow([
-      Utilities.getUuid(), userId, tipo, categoria, monto, textoSeguro_(mov.descripcion), meta, new Date()
-    ]);
+    const m = validarMovimiento_(mov, usuarioPublico_(u.row).metas);
+    getSheet_("Movimientos").appendRow([Utilities.getUuid(), userId, m.tipo, m.categoria, m.monto, m.descripcion, m.meta, m.fecha]);
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
   }
+}
+
+// Busca la fila de un movimiento y comprueba que sea del usuario de la sesión.
+function filaMovimiento_(userId, id) {
+  const data = getSheet_("Movimientos").getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === id) {
+      if (data[i][1] !== userId) throw new Error("Movimiento no encontrado.");
+      return i + 1;
+    }
+  }
+  throw new Error("Movimiento no encontrado.");
+}
+
+function actualizarMovimiento(token, id, mov) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const userId = usuarioDeSesion_(token);
+    const u = buscarUsuarioPorId_(userId);
+    if (!u) throw new Error("Usuario no encontrado.");
+    const m = validarMovimiento_(mov, usuarioPublico_(u.row).metas);
+    const fila = filaMovimiento_(userId, String(id));
+    getSheet_("Movimientos").getRange(fila, 3, 1, 6).setValues([[m.tipo, m.categoria, m.monto, m.descripcion, m.meta, m.fecha]]);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function eliminarMovimiento(token, id) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const userId = usuarioDeSesion_(token);
+    const fila = filaMovimiento_(userId, String(id));
+    getSheet_("Movimientos").deleteRow(fila);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function leerMovimientos_(userId) {
+  const tz = Session.getScriptTimeZone();
+  const data = getSheet_("Movimientos").getDataRange().getValues();
+  const lista = [];
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (r[1] !== userId || !(r[7] instanceof Date)) continue;
+    lista.push({
+      id: r[0],
+      mes: Utilities.formatDate(r[7], tz, "yyyy-MM"),
+      fecha: Utilities.formatDate(r[7], tz, "dd/MM"),
+      fechaISO: Utilities.formatDate(r[7], tz, "yyyy-MM-dd"),
+      orden: r[7].getTime() + i,
+      tipo: r[2], categoria: String(r[3]), monto: Number(r[4] || 0),
+      descripcion: String(r[5] || ""), meta: String(r[6] || "")
+    });
+  }
+  return lista;
 }
 
 /**
@@ -252,82 +362,139 @@ function getDashboard(token, mes) {
     const u = buscarUsuarioPorId_(userId);
     if (!u) throw new Error("Usuario no encontrado.");
     const usuario = usuarioPublico_(u.row);
-    const tz = Session.getScriptTimeZone();
     const hoy = new Date();
-    const mesActual = Utilities.formatDate(hoy, tz, "yyyy-MM");
+    const mesActual = Utilities.formatDate(hoy, Session.getScriptTimeZone(), "yyyy-MM");
     mes = /^\d{4}-\d{2}$/.test(String(mes)) ? String(mes) : mesActual;
-
-    const data = getSheet_("Movimientos").getDataRange().getValues();
-    const movimientos = [];
-    for (let i = 1; i < data.length; i++) {
-      const r = data[i];
-      if (r[1] !== userId || !(r[7] instanceof Date)) continue;
-      movimientos.push({
-        mes: Utilities.formatDate(r[7], tz, "yyyy-MM"),
-        fecha: Utilities.formatDate(r[7], tz, "dd/MM"),
-        orden: r[7].getTime(),
-        tipo: r[2], categoria: String(r[3]), monto: Number(r[4] || 0),
-        descripcion: String(r[5] || ""), meta: String(r[6] || "")
-      });
-    }
-    return calcularResumen(movimientos, usuario, mes, mesActual, hoy);
+    return calcularResumen(leerMovimientos_(userId), usuario, mes, mesActual, hoy);
   } catch (e) {
     return { error: e.message };
   }
 }
 
-/** Cálculo puro (sin Sheets): se puede probar fuera de Apps Script. */
-function calcularResumen(movimientos, usuario, mes, mesActual, hoy) {
-  let ingresos = 0, gastos = 0, ahorroMes = 0;
-  const metasAhorro = {};
-  usuario.metas.forEach(m => metasAhorro[m] = 0);
-  const porCategoria = {};
-  const historial = [];
-  const meses = {};
+// Todos los movimientos del usuario, para descargarlos en Excel (CSV).
+function exportarMovimientos(token) {
+  try {
+    const userId = usuarioDeSesion_(token);
+    const lista = leerMovimientos_(userId).sort(function (a, b) { return a.orden - b.orden; });
+    return { success: true, movimientos: lista.map(function (m) {
+      return { fechaISO: m.fechaISO, tipo: m.tipo, categoria: m.categoria, monto: m.monto, descripcion: m.descripcion, meta: m.meta };
+    }) };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
 
-  movimientos.forEach(m => {
+// ---------------------------------------------------------------------------
+// Cálculo (función pura, también la usa el modo demo de index.html)
+// ---------------------------------------------------------------------------
+
+/* ===== Cálculo del resumen (idéntico en Code.gs y en el modo demo) ===== */
+var CATEGORIAS = ["Arriendo/Dividendo", "Cuentas Básicas", "Alimentación/Feria", "Educación/Hijos", "Transporte", "Salud", "Ocio", "Otros"];
+var NOMBRES_MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+function mesesAtras_(mes, n) {
+  var p = mes.split("-"), a = Number(p[0]), m = Number(p[1]) - 1 - n;
+  while (m < 0) { m += 12; a--; }
+  while (m > 11) { m -= 12; a++; }
+  return a + "-" + ("0" + (m + 1)).slice(-2);
+}
+
+function calcularResumen(movimientos, usuario, mes, mesActual, hoy) {
+  var cfg = usuario.config || {};
+  var presupuestos = cfg.presupuestos || {};
+  var objetivos = cfg.objetivos || {};
+  var ingresos = 0, gastos = 0, ahorroMes = 0, porCat = {}, historial = [], meses = {}, porMes = {};
+  var ahorroMeta = {}, ahorroMetaMes = {};
+  usuario.metas.forEach(function (m) { ahorroMeta[m] = 0; ahorroMetaMes[m] = {}; });
+
+  movimientos.forEach(function (m) {
     meses[m.mes] = true;
-    if (m.tipo === "AHORRO" && m.mes <= mes) metasAhorro[m.meta] = (metasAhorro[m.meta] || 0) + m.monto;
+    var pm = porMes[m.mes] || (porMes[m.mes] = { ingresos: 0, gastos: 0, ahorro: 0 });
+    if (m.tipo === "INGRESO") pm.ingresos += m.monto;
+    if (m.tipo === "GASTO") pm.gastos += m.monto;
+    if (m.tipo === "AHORRO") {
+      pm.ahorro += m.monto;
+      if (m.mes <= mes) {
+        ahorroMeta[m.meta] = (ahorroMeta[m.meta] || 0) + m.monto;
+        if (!ahorroMetaMes[m.meta]) ahorroMetaMes[m.meta] = {};
+        ahorroMetaMes[m.meta][m.mes] = (ahorroMetaMes[m.meta][m.mes] || 0) + m.monto;
+      }
+    }
     if (m.mes !== mes) return;
     if (m.tipo === "INGRESO") ingresos += m.monto;
-    if (m.tipo === "GASTO") { gastos += m.monto; porCategoria[m.categoria] = (porCategoria[m.categoria] || 0) + m.monto; }
+    if (m.tipo === "GASTO") { gastos += m.monto; porCat[m.categoria] = (porCat[m.categoria] || 0) + m.monto; }
     if (m.tipo === "AHORRO") ahorroMes += m.monto;
     historial.push(m);
   });
+  historial.sort(function (a, b) { return b.orden - a.orden; });
 
-  historial.sort((a, b) => b.orden - a.orden);
-  const base = ingresos > 0 ? ingresos : usuario.ingreso;
-  const saldo = base - gastos - ahorroMes;
-
-  // Presupuesto semanal: saldo repartido en las semanas que quedan del mes
-  let semanasRestantes = 4;
+  var base = ingresos > 0 ? ingresos : usuario.ingreso;
+  var saldo = base - gastos - ahorroMes;
+  var semanas = 4;
   if (mes === mesActual) {
-    const ultimoDia = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
-    const diasRestantes = ultimoDia - hoy.getDate() + 1;
-    semanasRestantes = Math.max(1, Math.ceil(diasRestantes / 7));
+    var ultimo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+    semanas = Math.max(1, Math.ceil((ultimo - hoy.getDate() + 1) / 7));
   }
+
+  // Presupuesto por categoría
+  var nombresCat = CATEGORIAS.slice();
+  Object.keys(porCat).concat(Object.keys(presupuestos)).forEach(function (c) { if (nombresCat.indexOf(c) === -1) nombresCat.push(c); });
+  var alertas = [], presupuestoTotal = 0;
+  var categorias = nombresCat.map(function (c) {
+    var g = porCat[c] || 0, p = Number(presupuestos[c]) || 0;
+    presupuestoTotal += p;
+    var pct = p > 0 ? g / p : 0;
+    var estado = p > 0 ? (pct > 1 ? "excedido" : pct >= 0.8 ? "alerta" : "ok") : "sin";
+    if (estado === "excedido") alertas.push(c + ": superaste el presupuesto por $" + Math.round(g - p).toLocaleString("es-CL"));
+    else if (estado === "alerta") alertas.push(c + ": llevas el " + Math.round(pct * 100) + "% del presupuesto");
+    return { categoria: c, gastado: g, presupuesto: p, pct: pct, estado: estado };
+  }).filter(function (x) { return x.gastado > 0 || x.presupuesto > 0; })
+    .sort(function (a, b) { return b.gastado - a.gastado; });
+  if (base > 0 && gastos >= base * 0.9) alertas.unshift("Tus gastos ya llegan al " + Math.round(gastos / base * 100) + "% de tus ingresos del mes");
+
+  // Últimos 6 meses
+  var serie = [];
+  for (var i = 5; i >= 0; i--) {
+    var k = mesesAtras_(mes, i), d = porMes[k] || { ingresos: 0, gastos: 0, ahorro: 0 };
+    serie.push({ mes: k, etiqueta: NOMBRES_MES[Number(k.split("-")[1]) - 1], ingresos: d.ingresos, gastos: d.gastos, ahorro: d.ahorro });
+  }
+  var anterior = porMes[mesesAtras_(mes, 1)];
+  var gastosAnterior = anterior ? anterior.gastos : 0;
+
+  // Metas con objetivo y fecha estimada (ritmo = promedio de los últimos 3 meses)
+  var metas = usuario.metas.map(function (n) {
+    var ahorrado = ahorroMeta[n] || 0, objetivo = Number(objetivos[n]) || 0;
+    var ritmo = 0;
+    for (var j = 0; j < 3; j++) ritmo += (ahorroMetaMes[n] || {})[mesesAtras_(mes, j)] || 0;
+    ritmo = ritmo / 3;
+    var faltante = Math.max(0, objetivo - ahorrado), mesesEst = null, fecha = null;
+    if (objetivo > 0 && faltante === 0) mesesEst = 0;
+    else if (objetivo > 0 && ritmo > 0) {
+      mesesEst = Math.ceil(faltante / ritmo);
+      var f = mesesAtras_(mes, -mesesEst).split("-");
+      fecha = NOMBRES_MES[Number(f[1]) - 1] + " " + f[0];
+    }
+    return { nombre: n, ahorrado: ahorrado, objetivo: objetivo, pct: objetivo > 0 ? Math.min(1, ahorrado / objetivo) : 0,
+             ritmo: Math.round(ritmo), faltante: faltante, mesesEstimados: mesesEst, fechaEstimada: fecha };
+  });
 
   return {
     mes: mes,
-    meses: Object.keys(meses).concat(mesActual).filter((v, i, a) => a.indexOf(v) === i).sort().reverse(),
-    ingresos: ingresos,
-    ingresoEstimado: usuario.ingreso,
-    usaEstimado: ingresos === 0,
-    gastos: gastos,
-    ahorroMes: ahorroMes,
-    ahorroTotal: Object.keys(metasAhorro).reduce((s, k) => s + metasAhorro[k], 0),
-    metasAhorro: metasAhorro,
-    saldoDisponible: saldo,
-    presupuestoSemanal: saldo > 0 ? Math.floor(saldo / semanasRestantes) : 0,
+    meses: Object.keys(meses).concat([mesActual]).filter(function (v, i, a) { return a.indexOf(v) === i; }).sort().reverse(),
+    ingresos: ingresos, ingresoEstimado: usuario.ingreso, usaEstimado: ingresos === 0,
+    gastos: gastos, ahorroMes: ahorroMes, saldoDisponible: saldo,
+    presupuestoSemanal: saldo > 0 ? Math.floor(saldo / semanas) : 0,
     usoPresupuesto: base > 0 ? gastos / base : 0,
     alertaActiva: base > 0 && gastos >= base * 0.9,
-    gastosPorCategoria: Object.keys(porCategoria).map(k => ({ categoria: k, monto: porCategoria[k] }))
-      .sort((a, b) => b.monto - a.monto),
-    historial: historial.slice(0, 25).map(m => ({
-      fecha: m.fecha, tipo: m.tipo, categoria: m.tipo === "AHORRO" ? "Ahorro · " + m.meta : (m.tipo === "INGRESO" ? "Ingreso" : m.categoria),
-      monto: m.monto, descripcion: m.descripcion
-    }))
+    presupuestoTotal: presupuestoTotal,
+    categorias: categorias, alertas: alertas, serie: serie,
+    gastosMesAnterior: gastosAnterior,
+    variacionGastos: gastosAnterior > 0 ? (gastos - gastosAnterior) / gastosAnterior : null,
+    metas: metas,
+    historial: historial.slice(0, 300).map(function (m) {
+      return { id: m.id, fecha: m.fecha, fechaISO: m.fechaISO, tipo: m.tipo, categoria: m.categoria, monto: m.monto, descripcion: m.descripcion, meta: m.meta };
+    })
   };
 }
 
-if (typeof module !== "undefined") module.exports = { calcularResumen };
+if (typeof module !== "undefined") module.exports = { calcularResumen: calcularResumen };
