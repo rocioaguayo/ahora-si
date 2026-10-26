@@ -1,0 +1,8 @@
+# Configuración local de clasp (contiene el ID del script)
+.clasp.json
+.clasprc.json
+# Respaldos y exportaciones con datos reales
+*.xlsx
+*.csv
+respaldos/
+.DS_Store

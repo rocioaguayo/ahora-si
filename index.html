@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ahora Sí · Control financiero</title>
+  <style>
+    :root {
+      --fondo: #fcf6f1;
+      --tarjeta: #ffffff;
+      --suave: #fffaf5;
+      --borde: #eee3d9;
+      --texto: #3b2a20;
+      --texto-2: #7a6457;
+      --acento: #c2185b;
+      --acento-hover: #a3134c;
+      --acento-suave: #fdeef4;
+      --ingreso: #2e7d32;
+      --gasto: #c62828;
+      --ahorro: #1565c0;
+      --fuente: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--fuente); background: var(--fondo); color: var(--texto); -webkit-font-smoothing: antialiased; }
+    .demo-banner { display: none; background: var(--texto); color: #fff; text-align: center; font-size: 13px; padding: 8px 16px; }
+    .demo-banner b { color: #ffd0e1; }
+
+    header.nav { display: none; position: sticky; top: 0; z-index: 10; background: var(--tarjeta); border-bottom: 1px solid var(--borde); }
+    .nav-inner { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 4px; padding: 10px 16px; overflow-x: auto; }
+    .marca { font-weight: 800; color: var(--acento); margin-right: auto; white-space: nowrap; }
+    .tab { background: none; border: 0; padding: 8px 12px; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 600; color: var(--texto-2); cursor: pointer; white-space: nowrap; }
+    .tab.activo, .tab:hover { background: var(--acento-suave); color: var(--acento); }
+
+    main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+    .card { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 20px; padding: 24px; margin-bottom: 16px; }
+    .auth { max-width: 420px; margin: 24px auto; }
+    .seccion { display: none; }
+    h1 { margin: 0; font-size: 32px; color: var(--acento); letter-spacing: -0.5px; }
+    h2 { margin: 0 0 16px; font-size: 20px; }
+    h3 { margin: 24px 0 12px; font-size: 15px; color: var(--texto-2); text-transform: uppercase; letter-spacing: .04em; }
+    .lema { margin: 4px 0 24px; color: var(--texto-2); }
+
+    label { display: block; font-size: 13px; font-weight: 600; color: var(--texto-2); margin: 12px 0 4px; }
+    input, select { width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--borde); font: inherit; font-size: 16px; color: var(--texto); background: var(--suave); }
+    input:focus, select:focus { outline: 2px solid var(--acento); outline-offset: 1px; }
+    .btn { width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: 12px; background: var(--acento); color: #fff; font: inherit; font-weight: 700; font-size: 16px; cursor: pointer; }
+    .btn:hover { background: var(--acento-hover); }
+    .btn:disabled { opacity: .6; cursor: wait; }
+    .btn-sec { background: var(--tarjeta); color: var(--acento); border: 1px solid var(--acento); }
+    .btn-sec:hover { background: var(--acento-suave); }
+    .btn-chico { width: auto; margin: 0; padding: 8px 12px; font-size: 13px; }
+    .link { background: none; border: 0; color: var(--acento); font: inherit; font-weight: 600; cursor: pointer; padding: 0; text-decoration: underline; }
+
+    .msg { display: none; margin-top: 14px; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; }
+    .msg.ok { display: block; background: #e8f5e9; color: var(--ingreso); }
+    .msg.error { display: block; background: #ffebee; color: var(--gasto); }
+    .msg.info { display: block; background: #fff3e0; color: #b45309; }
+
+    .segmento { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: var(--suave); border: 1px solid var(--borde); border-radius: 12px; padding: 4px; }
+    .segmento button { border: 0; background: none; padding: 10px 6px; border-radius: 9px; font: inherit; font-size: 14px; font-weight: 600; color: var(--texto-2); cursor: pointer; }
+    .segmento button.activo { background: var(--tarjeta); color: var(--acento); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .chip { border: 1px solid var(--borde); background: var(--suave); border-radius: 999px; padding: 8px 12px; font: inherit; font-size: 14px; cursor: pointer; color: var(--texto); }
+    .chip.activo { border-color: var(--acento); color: var(--acento); background: var(--acento-suave); font-weight: 600; }
+
+    .fila-titulo { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .fila-titulo h2 { margin: 0; }
+    .controles { display: flex; gap: 8px; align-items: center; }
+    .controles select { width: auto; padding: 8px 10px; font-size: 14px; }
+
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .kpi { background: var(--suave); border: 1px solid var(--borde); border-radius: 14px; padding: 14px; }
+    .kpi span { display: block; font-size: 12px; font-weight: 600; color: var(--texto-2); text-transform: uppercase; letter-spacing: .04em; }
+    .kpi b { display: block; font-size: 22px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .kpi small { display: block; font-size: 12px; color: var(--texto-2); margin-top: 2px; }
+    .kpi.saldo { background: var(--acento-suave); border-color: #f6c9da; }
+    .kpi.saldo b { color: var(--acento); }
+
+    .uso { margin-top: 18px; }
+    .uso-cab { display: flex; justify-content: space-between; font-size: 13px; color: var(--texto-2); margin-bottom: 6px; }
+    .barra { height: 10px; background: #f1e7de; border-radius: 6px; overflow: hidden; }
+    .barra > div { height: 100%; background: var(--acento); width: 0; transition: width .4s ease; }
+    .barra.alerta > div { background: var(--gasto); }
+    .alerta-banner { display: none; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #ffebee; color: var(--gasto); font-size: 14px; font-weight: 600; }
+
+    .cat { display: grid; grid-template-columns: 140px 1fr 96px; gap: 10px; align-items: center; font-size: 14px; margin-bottom: 8px; }
+    .cat .nombre { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cat .monto { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+    .cat .barra { height: 8px; }
+    .vacio { color: var(--texto-2); font-size: 14px; }
+
+    .metas { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    .meta { background: #fff3e6; border-radius: 14px; padding: 14px; }
+    .meta span { font-size: 13px; font-weight: 600; color: var(--texto-2); }
+    .meta b { display: block; font-size: 18px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--borde); color: var(--texto-2); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    td { padding: 10px 8px; border-bottom: 1px solid #f6efe8; vertical-align: top; }
+    td.monto { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    td .desc { display: block; color: var(--texto-2); font-size: 12px; margin-top: 2px; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 8px; font-size: 12px; font-weight: 700; }
+    .b-INGRESO { background: #e8f5e9; color: var(--ingreso); }
+    .b-GASTO { background: #ffebee; color: var(--gasto); }
+    .b-AHORRO { background: #e3f2fd; color: var(--ahorro); }
+
+    .pie { margin-top: 24px; text-align: center; font-size: 12px; color: var(--texto-2); }
+    @media (max-width: 520px) {
+      .cat { grid-template-columns: 1fr 88px; }
+      .cat .barra { grid-column: 1 / -1; order: 3; }
+      .kpi b { font-size: 19px; }
+      .marca { display: none; }
+      .nav-inner { justify-content: space-between; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="demo-banner" id="demo-banner">
+  <b>Modo demo:</b> datos ficticios, nada se guarda. Correo <b>demo@ahorasi.cl</b> · PIN <b>1234</b>
+</div>
+
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <span class="marca">Ahora Sí</span>
+    <button class="tab activo" data-ir="resumen">Resumen</button>
+    <button class="tab" data-ir="registrar">Registrar</button>
+    <button class="tab" data-ir="historial">Historial</button>
+    <button class="tab" id="btn-salir">Salir</button>
+  </div>
+</header>
+
+<main>
+  <!-- ACCESO -->
+  <section class="card auth seccion" id="acceso" style="display:block">
+    <h1>Ahora Sí</h1>
+    <p class="lema">Tu presupuesto del mes, claro y en un solo lugar.</p>
+
+    <form id="form-login" autocomplete="on">
+      <label for="l-usuario">Correo</label>
+      <input id="l-usuario" type="email" autocomplete="username" required>
+      <label for="l-pin">PIN</label>
+      <input id="l-pin" type="password" inputmode="numeric" pattern="\d{4,6}" autocomplete="current-password" required>
+      <button class="btn" type="submit">Entrar</button>
+    </form>
+    <p style="font-size:14px;margin:18px 0 0">¿No tienes cuenta? <button class="link" id="ver-registro" type="button">Crear una</button></p>
+
+    <form id="form-registro" style="display:none">
+      <h2 style="margin-top:24px">Crear cuenta</h2>
+      <label for="r-nombre">Nombre</label>
+      <input id="r-nombre" maxlength="60" required>
+      <label for="r-correo">Correo</label>
+      <input id="r-correo" type="email" required>
+      <label for="r-pin">PIN (4 a 6 números)</label>
+      <input id="r-pin" type="password" inputmode="numeric" pattern="\d{4,6}" required>
+      <label for="r-ingreso">Ingreso mensual estimado</label>
+      <input id="r-ingreso" type="number" min="0" step="1000" inputmode="numeric">
+      <button class="btn btn-sec" type="submit">Crear cuenta</button>
+    </form>
+    <div class="msg" id="msg-acceso"></div>
+  </section>
+
+  <!-- RESUMEN -->
+  <section class="card seccion" id="resumen">
+    <div class="fila-titulo">
+      <h2 id="saludo">Resumen</h2>
+      <div class="controles">
+        <select id="sel-mes" aria-label="Mes"></select>
+        <button class="btn btn-sec btn-chico" id="btn-privado" type="button">Ocultar montos</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi saldo"><span>Saldo disponible</span><b id="k-saldo">–</b><small id="k-semanal"></small></div>
+      <div class="kpi"><span>Ingresos</span><b id="k-ingresos">–</b><small id="k-ingresos-nota"></small></div>
+      <div class="kpi"><span>Gastos</span><b id="k-gastos">–</b></div>
+      <div class="kpi"><span>Ahorrado este mes</span><b id="k-ahorro">–</b></div>
+    </div>
+
+    <div class="uso">
+      <div class="uso-cab"><span>Uso del presupuesto</span><span id="uso-pct">0%</span></div>
+      <div class="barra" id="uso-barra"><div></div></div>
+      <div class="alerta-banner" id="alerta">Tus gastos ya superan el 90% de tus ingresos del mes.</div>
+    </div>
+
+    <h3>Gastos por categoría</h3>
+    <div id="categorias"></div>
+
+    <h3>Metas de ahorro (acumulado)</h3>
+    <div class="metas" id="metas"></div>
+  </section>
+
+  <!-- REGISTRAR -->
+  <section class="card seccion" id="registrar">
+    <h2>Registrar movimiento</h2>
+    <form id="form-mov">
+      <div class="segmento" id="seg-tipo">
+        <button type="button" data-tipo="GASTO" class="activo">Gasto</button>
+        <button type="button" data-tipo="INGRESO">Ingreso</button>
+        <button type="button" data-tipo="AHORRO">Ahorro</button>
+      </div>
+
+      <div id="bloque-categoria">
+        <label>Categoría</label>
+        <div class="chips" id="chips-cat"></div>
+      </div>
+      <div id="bloque-meta" style="display:none">
+        <label for="m-meta">Meta de ahorro</label>
+        <select id="m-meta"></select>
+      </div>
+
+      <label for="m-monto">Monto</label>
+      <input id="m-monto" type="number" min="1" step="1" inputmode="numeric" required>
+      <label for="m-desc">Detalle (opcional)</label>
+      <input id="m-desc" maxlength="120">
+      <button class="btn" type="submit" id="btn-guardar">Guardar</button>
+    </form>
+    <div class="msg" id="msg-mov"></div>
+  </section>
+
+  <!-- HISTORIAL -->
+  <section class="card seccion" id="historial">
+    <div class="fila-titulo"><h2>Historial</h2><span class="vacio" id="hist-mes"></span></div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Fecha</th><th>Movimiento</th><th style="text-align:right">Monto</th></tr></thead>
+        <tbody id="tabla-hist"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="pie">Desarrollado por Rocío Aguayo</p>
+</main>
+
+<script>
+/* =========================================================================
+   Backend: Apps Script si está disponible; si no, modo demo en memoria.
+   Así el mismo archivo sirve como app real y como demo en GitHub Pages.
+   ========================================================================= */
+const ES_APPS_SCRIPT = typeof google !== "undefined" && google.script && google.script.run;
+
+function llamar(fn, ...args) {
+  if (ES_APPS_SCRIPT) {
+    return new Promise((ok, fail) => google.script.run.withSuccessHandler(ok).withFailureHandler(fail)[fn](...args));
+  }
+  return new Promise(ok => setTimeout(() => ok(Demo[fn](...args)), 150));
+}
+
+const CATEGORIAS = ["Vivienda", "Cuentas básicas", "Supermercado y feria", "Transporte", "Educación", "Salud", "Ocio", "Otros"];
+
+/* ---------- Modo demo (solo fuera de Apps Script) ---------- */
+const Demo = (() => {
+  const user = { nombre: "Camila", correo: "demo@ahorasi.cl", pin: "1234", ingreso: 1400000,
+                 metas: ["Casa Propia", "Vehículo", "Fondo Emergencia", "Otros"] };
+  const movs = [];
+  const hoy = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  const clave = d => d.getFullYear() + "-" + pad(d.getMonth() + 1);
+  function add(mesAtras, dia, tipo, categoria, monto, descripcion, meta) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - mesAtras, Math.min(dia, mesAtras === 0 ? hoy.getDate() : 28), 12);
+    movs.push({ mes: clave(d), fecha: pad(d.getDate()) + "/" + pad(d.getMonth() + 1), orden: d.getTime() + movs.length,
+                tipo, categoria: tipo === "GASTO" ? categoria : tipo, monto, descripcion: descripcion || "", meta: meta || "" });
+  }
+  [2, 1, 0].forEach(m => {
+    const f = 1 + m * 0.03;
+    add(m, 1, "INGRESO", "", 1400000, "Sueldo");
+    add(m, 2, "GASTO", "Vivienda", 520000, "Dividendo");
+    add(m, 3, "AHORRO", "", 100000, "Ahorro automático", "Fondo Emergencia");
+    add(m, 5, "GASTO", "Cuentas básicas", Math.round(78000 * f), "Luz, agua y gas");
+    add(m, 6, "GASTO", "Supermercado y feria", Math.round(96000 * f), "Compra semanal");
+    add(m, 9, "GASTO", "Transporte", 45000, "Bencina");
+    add(m, 12, "GASTO", "Supermercado y feria", Math.round(88000 * f), "Feria");
+    add(m, 14, "GASTO", "Educación", 120000, "Colegio");
+    add(m, 16, "AHORRO", "", 80000, "Pie departamento", "Casa Propia");
+    add(m, 19, "GASTO", "Ocio", Math.round(35000 / f), "Cine");
+    add(m, 22, "GASTO", "Salud", 28000, "Farmacia");
+    add(m, 25, "GASTO", "Supermercado y feria", 74000, "Compra semanal");
+  });
+  const TOKEN = "demo-token";
+  return {
+    login(u, p) {
+      return (String(u).trim().toLowerCase() === user.correo && String(p) === user.pin)
+        ? { ok: true, token: TOKEN, user: { nombre: user.nombre, ingreso: user.ingreso, metas: user.metas, correo: user.correo } }
+        : { ok: false, error: "En la demo usa demo@ahorasi.cl y PIN 1234." };
+    },
+    logout() { return { ok: true }; },
+    registrarUsuario() { return { success: false, error: "En la demo no se crean cuentas. Usa demo@ahorasi.cl / 1234." }; },
+    registrarMovimiento(t, mov) {
+      const monto = Math.round(Number(mov.monto));
+      if (!(monto > 0)) return { success: false, error: "Ingresa un monto válido." };
+      const d = new Date();
+      movs.push({ mes: clave(d), fecha: pad(d.getDate()) + "/" + pad(d.getMonth() + 1), orden: d.getTime(),
+                  tipo: mov.tipo, categoria: mov.tipo === "GASTO" ? mov.categoria : mov.tipo, monto,
+                  descripcion: String(mov.descripcion || "").slice(0, 120), meta: mov.metaAhorro || "" });
+      return { success: true };
+    },
+    getDashboard(t, mes) {
+      const actual = clave(new Date());
+      return calcularResumen(movs, user, mes || actual, actual, new Date());
+    }
+  };
+})();
+
+/* Copia de calcularResumen() de Code.gs, usada solo por el modo demo. */
+function calcularResumen(movimientos, usuario, mes, mesActual, hoy) {
+  let ingresos = 0, gastos = 0, ahorroMes = 0;
+  const metasAhorro = {}; usuario.metas.forEach(m => metasAhorro[m] = 0);
+  const porCategoria = {}, historial = [], meses = {};
+  movimientos.forEach(m => {
+    meses[m.mes] = true;
+    if (m.tipo === "AHORRO" && m.mes <= mes) metasAhorro[m.meta] = (metasAhorro[m.meta] || 0) + m.monto;
+    if (m.mes !== mes) return;
+    if (m.tipo === "INGRESO") ingresos += m.monto;
+    if (m.tipo === "GASTO") { gastos += m.monto; porCategoria[m.categoria] = (porCategoria[m.categoria] || 0) + m.monto; }
+    if (m.tipo === "AHORRO") ahorroMes += m.monto;
+    historial.push(m);
+  });
+  historial.sort((a, b) => b.orden - a.orden);
+  const base = ingresos > 0 ? ingresos : usuario.ingreso;
+  const saldo = base - gastos - ahorroMes;
+  let semanasRestantes = 4;
+  if (mes === mesActual) {
+    const ultimoDia = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+    semanasRestantes = Math.max(1, Math.ceil((ultimoDia - hoy.getDate() + 1) / 7));
+  }
+  return {
+    mes, meses: Object.keys(meses).concat(mesActual).filter((v, i, a) => a.indexOf(v) === i).sort().reverse(),
+    ingresos, ingresoEstimado: usuario.ingreso, usaEstimado: ingresos === 0, gastos, ahorroMes,
+    ahorroTotal: Object.keys(metasAhorro).reduce((s, k) => s + metasAhorro[k], 0), metasAhorro,
+    saldoDisponible: saldo, presupuestoSemanal: saldo > 0 ? Math.floor(saldo / semanasRestantes) : 0,
+    usoPresupuesto: base > 0 ? gastos / base : 0, alertaActiva: base > 0 && gastos >= base * 0.9,
+    gastosPorCategoria: Object.keys(porCategoria).map(k => ({ categoria: k, monto: porCategoria[k] })).sort((a, b) => b.monto - a.monto),
+    historial: historial.slice(0, 25).map(m => ({ fecha: m.fecha, tipo: m.tipo,
+      categoria: m.tipo === "AHORRO" ? "Ahorro · " + m.meta : (m.tipo === "INGRESO" ? "Ingreso" : m.categoria), monto: m.monto, descripcion: m.descripcion }))
+  };
+}
+
+/* =========================================================================
+   Interfaz
+   ========================================================================= */
+const $ = id => document.getElementById(id);
+const estado = { token: null, user: null, datos: null, privado: false, tipo: "GASTO", categoria: CATEGORIAS[0] };
+const clp = new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+const fmt = n => estado.privado ? "$ •••" : clp.format(n || 0);
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const nombreMes = k => { const [a, m] = k.split("-"); return MESES[Number(m) - 1] + " " + a; };
+
+function mensaje(el, tipo, texto) { el.className = "msg " + tipo; el.textContent = texto; }
+function limpiar(el) { el.className = "msg"; el.textContent = ""; }
+function el(tag, cls, texto) { const e = document.createElement(tag); if (cls) e.className = cls; if (texto != null) e.textContent = texto; return e; }
+
+function ir(id) {
+  document.querySelectorAll(".seccion").forEach(s => s.style.display = "none");
+  $(id).style.display = "block";
+  document.querySelectorAll(".tab[data-ir]").forEach(t => t.classList.toggle("activo", t.dataset.ir === id));
+  window.scrollTo(0, 0);
+}
+
+/* ---- Acceso ---- */
+$("ver-registro").onclick = () => { const f = $("form-registro"); f.style.display = f.style.display === "none" ? "block" : "none"; };
+
+$("form-login").onsubmit = async e => {
+  e.preventDefault();
+  const msg = $("msg-acceso");
+  mensaje(msg, "info", "Ingresando…");
+  try {
+    const r = await llamar("login", $("l-usuario").value.trim(), $("l-pin").value.trim());
+    if (!r.ok) return mensaje(msg, "error", r.error || "Correo o PIN incorrectos.");
+    limpiar(msg);
+    estado.token = r.token; estado.user = r.user;
+    $("l-pin").value = "";
+    $("saludo").textContent = "Hola, " + r.user.nombre;
+    $("acceso").style.display = "none";
+    $("nav").style.display = "block";
+    prepararFormulario();
+    ir("resumen");
+    cargar();
+  } catch (err) { mensaje(msg, "error", "No se pudo conectar. Intenta de nuevo."); }
+};
+
+$("form-registro").onsubmit = async e => {
+  e.preventDefault();
+  const msg = $("msg-acceso");
+  mensaje(msg, "info", "Creando cuenta…");
+  try {
+    const r = await llamar("registrarUsuario", {
+      nombre: $("r-nombre").value.trim(), correo: $("r-correo").value.trim(),
+      pin: $("r-pin").value.trim(), ingreso: $("r-ingreso").value.trim()
+    });
+    if (!r.success) return mensaje(msg, "error", r.error);
+    mensaje(msg, "ok", "Cuenta creada. Ya puedes entrar con tu correo y PIN.");
+    $("l-usuario").value = $("r-correo").value.trim();
+    $("form-registro").reset(); $("form-registro").style.display = "none";
+  } catch (err) { mensaje(msg, "error", "No se pudo crear la cuenta."); }
+};
+
+$("btn-salir").onclick = async () => {
+  try { await llamar("logout", estado.token); } catch (e) {}
+  Object.assign(estado, { token: null, user: null, datos: null });
+  $("nav").style.display = "none";
+  document.querySelectorAll(".seccion").forEach(s => s.style.display = "none");
+  $("acceso").style.display = "block";
+};
+
+document.querySelectorAll(".tab[data-ir]").forEach(t => t.onclick = () => ir(t.dataset.ir));
+
+/* ---- Registrar movimiento ---- */
+function prepararFormulario() {
+  const chips = $("chips-cat"); chips.innerHTML = "";
+  CATEGORIAS.forEach(c => {
+    const b = el("button", "chip" + (c === estado.categoria ? " activo" : ""), c);
+    b.type = "button";
+    b.onclick = () => { estado.categoria = c; chips.querySelectorAll(".chip").forEach(x => x.classList.toggle("activo", x === b)); };
+    chips.appendChild(b);
+  });
+  const sel = $("m-meta"); sel.innerHTML = "";
+  estado.user.metas.forEach(m => { const o = el("option", null, m); o.value = m; sel.appendChild(o); });
+}
+
+document.querySelectorAll("#seg-tipo button").forEach(b => b.onclick = () => {
+  estado.tipo = b.dataset.tipo;
+  document.querySelectorAll("#seg-tipo button").forEach(x => x.classList.toggle("activo", x === b));
+  $("bloque-categoria").style.display = estado.tipo === "GASTO" ? "block" : "none";
+  $("bloque-meta").style.display = estado.tipo === "AHORRO" ? "block" : "none";
+});
+
+$("form-mov").onsubmit = async e => {
+  e.preventDefault();
+  const msg = $("msg-mov"), btn = $("btn-guardar");
+  const monto = Number($("m-monto").value);
+  if (!(monto > 0)) return mensaje(msg, "error", "Ingresa un monto válido.");
+  btn.disabled = true;
+  try {
+    const r = await llamar("registrarMovimiento", estado.token, {
+      tipo: estado.tipo, categoria: estado.categoria, monto,
+      descripcion: $("m-desc").value.trim(), metaAhorro: estado.tipo === "AHORRO" ? $("m-meta").value : ""
+    });
+    if (!r.success) return sesionVencida(r.error) || mensaje(msg, "error", r.error);
+    mensaje(msg, "ok", "Guardado: " + clp.format(monto));
+    $("m-monto").value = ""; $("m-desc").value = "";
+    cargar(new Date().getFullYear() + "-" + String(new Date().getMonth() + 1).padStart(2, "0"));
+  } catch (err) { mensaje(msg, "error", "No se pudo guardar. Intenta de nuevo."); }
+  finally { btn.disabled = false; }
+};
+
+function sesionVencida(error) {
+  if (error && /sesi[oó]n/i.test(error)) { alert(error); $("btn-salir").onclick(); return true; }
+  return false;
+}
+
+/* ---- Resumen ---- */
+$("sel-mes").onchange = () => cargar($("sel-mes").value);
+$("btn-privado").onclick = () => {
+  estado.privado = !estado.privado;
+  $("btn-privado").textContent = estado.privado ? "Mostrar montos" : "Ocultar montos";
+  pintar();
+};
+
+async function cargar(mes) {
+  try {
+    const d = await llamar("getDashboard", estado.token, mes || (estado.datos && estado.datos.mes));
+    if (d.error) return sesionVencida(d.error) || alert(d.error);
+    estado.datos = d;
+    pintar();
+  } catch (err) { /* sin conexión: se mantiene lo último que se mostró */ }
+}
+
+function pintar() {
+  const d = estado.datos; if (!d) return;
+
+  const sel = $("sel-mes"); sel.innerHTML = "";
+  d.meses.forEach(m => { const o = el("option", null, nombreMes(m)); o.value = m; o.selected = m === d.mes; sel.appendChild(o); });
+
+  $("k-saldo").textContent = fmt(d.saldoDisponible);
+  $("k-semanal").textContent = d.presupuestoSemanal > 0 ? "Puedes gastar " + fmt(d.presupuestoSemanal) + " por semana" : "Sin margen este mes";
+  $("k-ingresos").textContent = fmt(d.usaEstimado ? d.ingresoEstimado : d.ingresos);
+  $("k-ingresos-nota").textContent = d.usaEstimado ? "Estimado (aún sin ingresos registrados)" : "";
+  $("k-gastos").textContent = fmt(d.gastos);
+  $("k-ahorro").textContent = fmt(d.ahorroMes);
+
+  const pct = Math.round(d.usoPresupuesto * 100);
+  $("uso-pct").textContent = pct + "%";
+  $("uso-barra").firstElementChild.style.width = Math.min(pct, 100) + "%";
+  $("uso-barra").classList.toggle("alerta", d.alertaActiva);
+  $("alerta").style.display = d.alertaActiva ? "block" : "none";
+
+  const cats = $("categorias"); cats.innerHTML = "";
+  if (!d.gastosPorCategoria.length) cats.appendChild(el("p", "vacio", "Sin gastos registrados este mes."));
+  const max = d.gastosPorCategoria.length ? d.gastosPorCategoria[0].monto : 1;
+  d.gastosPorCategoria.forEach(c => {
+    const fila = el("div", "cat");
+    fila.appendChild(el("span", "nombre", c.categoria));
+    const barra = el("div", "barra"); const relleno = el("div"); relleno.style.width = (c.monto / max * 100) + "%"; barra.appendChild(relleno);
+    fila.appendChild(barra);
+    fila.appendChild(el("span", "monto", fmt(c.monto)));
+    cats.appendChild(fila);
+  });
+
+  const metas = $("metas"); metas.innerHTML = "";
+  Object.keys(d.metasAhorro).forEach(m => {
+    const c = el("div", "meta"); c.appendChild(el("span", null, m)); c.appendChild(el("b", null, fmt(d.metasAhorro[m]))); metas.appendChild(c);
+  });
+
+  $("hist-mes").textContent = nombreMes(d.mes);
+  const tb = $("tabla-hist"); tb.innerHTML = "";
+  if (!d.historial.length) { const tr = el("tr"); const td = el("td", "vacio", "Sin movimientos este mes."); td.colSpan = 3; tr.appendChild(td); tb.appendChild(tr); }
+  d.historial.forEach(m => {
+    const tr = el("tr");
+    tr.appendChild(el("td", null, m.fecha));
+    const td = el("td"); td.appendChild(el("span", "badge b-" + m.tipo, m.categoria));
+    if (m.descripcion) td.appendChild(el("span", "desc", m.descripcion));
+    tr.appendChild(td);
+    const signo = m.tipo === "INGRESO" ? "+" : "−";
+    tr.appendChild(el("td", "monto", estado.privado ? "$ •••" : signo + " " + clp.format(m.monto)));
+    tb.appendChild(tr);
+  });
+}
+
+if (!ES_APPS_SCRIPT) {
+  $("demo-banner").style.display = "block";
+  $("l-usuario").value = "demo@ahorasi.cl";
+  $("l-pin").value = "1234";
+}
+</script>
+</body>
+</html>
